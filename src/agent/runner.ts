@@ -98,11 +98,15 @@ export async function tick(
       report.drafted++;
     }
 
-    if (next.stage === "contacted") {
+    if (next.stage === "contacted" || next.stage === "replied" || next.stage === "meeting") {
       const pending = next.messages.find((m) => m.status !== "sent");
       if (pending) {
         next = await trySend(next, pending);
-      } else if (!sequenceExhausted(next, config.followupCadenceHours) && nextStepDue(next, config.followupCadenceHours, nowMs)) {
+      } else if (
+        next.stage === "contacted" &&
+        !sequenceExhausted(next, config.followupCadenceHours) &&
+        nextStepDue(next, config.followupCadenceHours, nowMs)
+      ) {
         const followup = await writeFollowup(llm, config.offer, next.lead, lastSent(next)!, now);
         next = { ...next, messages: [...next.messages, followup] };
         report.drafted++;
