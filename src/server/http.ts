@@ -6,6 +6,7 @@ import type { LeadRecord } from "../core/types.js";
 import type { LlmClient } from "../llm/client.js";
 import { classifyReply } from "../reply/classifier.js";
 import { draftReply } from "../reply/responder.js";
+import { dashboardHtml, stateJson } from "./dashboard.js";
 
 export interface InboundEmail {
   from: string;
@@ -88,10 +89,45 @@ export async function handleInbound(
   }
 }
 
-/** The rainmaker HTTP surface: inbound webhook + health check. Dashboard mounts separately. */
+/** Approve a draft so the runner sends it next tick. */
+export async function approveMessage(store: Store, messageId: string): Promise<boolean> {
+  const records = await store.load();
+  for (const [id, record] of records) {
+    const message = record.messages.find((m) => m.id === messageId);
+    if (message && message.status === "draft") {
+      const messages = record.messages.map((m) => (m.id === messageId ? { ...m, status: "approved" as const } : m));
+      records.set(id, { ...record, messages });
+      await store.save(records.values());
+      return true;
+    }
+  }
+  return false;
+}
+
+/** The rainmaker HTTP surface: dashboard, inbound webhook, approvals, health. */
 export function createHttpServer(config: RainmakerConfig, llm: LlmClient, store: Store): Server {
   return createServer(async (req, res) => {
     try {
+      if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
+        res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+        res.end(dashboardHtml());
+        return;
+      }
+      if (req.method === "GET" && req.url === "/api/state") {
+        const records = await store.load();
+        json(res, 200, stateJson([...records.values()]));
+        return;
+      }
+      if (req.method === "POST" && req.url === "/approve") {
+        const payload = JSON.parse(await readBody(req)) as { messageId?: string };
+        if (!payload.messageId) {
+          json(res, 400, { error: "need messageId" });
+          return;
+        }
+        const ok = await approveMessage(store, payload.messageId);
+        json(res, ok ? 200 : 404, { approved: ok });
+        return;
+      }
       if (req.method === "GET" && req.url === "/health") {
         json(res, 200, { ok: true });
         return;
