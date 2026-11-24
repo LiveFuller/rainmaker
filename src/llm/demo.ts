@@ -20,12 +20,14 @@ export class DemoLlm implements LlmClient {
   }
 
   private qualify(user: string): string {
-    const lower = user.toLowerCase();
+    // Only scan the lead half of the prompt — the ICP text would self-match.
+    const leadPart = user.split("---").pop() ?? user;
+    const lower = leadPart.toLowerCase();
     const hotSignals = ["owner", "founder", "ceo", "director", "hotel", "manager"];
     const coldSignals = ["student", "unemployed", "no company"];
     const hits = hotSignals.filter((s) => lower.includes(s)).length;
     const misses = coldSignals.filter((s) => lower.includes(s)).length;
-    const score = Math.max(5, Math.min(95, 35 + hits * 18 - misses * 30));
+    const score = Math.max(5, Math.min(95, 45 + hits * 25 - misses * 35));
     const reasoning =
       score >= 70
         ? "Senior buyer at an organization matching the ideal customer profile."
@@ -37,7 +39,7 @@ export class DemoLlm implements LlmClient {
 
   private write(user: string): string {
     const recipient = /Recipient: ([^,\n]+)/.exec(user)?.[1]?.trim() ?? "there";
-    const company = / at ([^.\n]+)/.exec(user)?.[1]?.trim();
+    const company = / at ([^\n]+)/.exec(user)?.[1]?.trim();
     const sellingMatch = /Selling: (.+?)(?: — |\n)/s.exec(user);
     const product = sellingMatch?.[1]?.trim() ?? "our product";
     const isFollowup = user.startsWith("Write follow-up");

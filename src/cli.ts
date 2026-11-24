@@ -104,9 +104,10 @@ async function runReal(leadsPath: string, configPath: string): Promise<void> {
       record = { ...record, qualification };
       record = advance(record, "qualified");
     }
-    if (record.stage === "qualified" && record.qualification?.tier !== "cold") {
+    const qualification = record.qualification;
+    if (record.stage === "qualified" && qualification && qualification.tier !== "cold") {
       if (config.mode === "approval") {
-        const message = await writeFirstTouch(llm, config.offer, lead, record.qualification);
+        const message = await writeFirstTouch(llm, config.offer, lead, qualification);
         record = { ...record, messages: [message] };
         console.log(`Draft for ${lead.email} needs approval before sending.`);
         if (canTransition(record.stage, "contacted")) record = advance(record, "contacted");
