@@ -13,6 +13,9 @@ export class DemoLlm implements LlmClient {
     if (system.startsWith("You write short first-touch sales emails")) {
       return this.write(user);
     }
+    if (system.startsWith("You write replies for a salesperson")) {
+      return this.answer(user);
+    }
     if (system.startsWith("You classify replies to cold outreach.")) {
       return this.classify(user);
     }
@@ -50,11 +53,20 @@ export class DemoLlm implements LlmClient {
     return JSON.stringify({ subject, body });
   }
 
+  private answer(user: string): string {
+    const recipient = (/Lead: ([^,\n]+)/.exec(user)?.[1]?.trim() ?? "there").replace(/ at .+$/, "");
+    const calendar = /calendar link directly: (\S+)/.exec(user)?.[1]?.replace(/[.,]+$/, "");
+    const body = calendar
+      ? `Hi ${recipient},\n\nGreat to hear. Easiest is to grab a slot directly: ${calendar} — fifteen minutes is plenty.\n\nIf nothing fits, tell me a time and I'll make it work.`
+      : `Hi ${recipient},\n\nGood question. Short answer: yes — happy to walk you through it on a quick call so you can judge it in ten minutes.\n\nDoes Thursday suit you?`;
+    return JSON.stringify({ body });
+  }
+
   private classify(user: string): string {
     const lower = user.toLowerCase();
     if (/unsubscribe|remove me|stop email/.test(lower)) return "unsubscribe";
     if (/out of office|away until|automatic reply/.test(lower)) return "out_of_office";
-    if (/sounds good|let's talk|book|interested|send me/.test(lower)) return "interested";
+    if (/sounds good|let's talk|can we talk|book|interest|send me/.test(lower)) return "interested";
     if (/how much|what does|can it|does it/.test(lower)) return "question";
     if (/not interested|no thanks|pass/.test(lower)) return "not_interested";
     return "unknown";
