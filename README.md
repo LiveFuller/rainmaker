@@ -74,36 +74,17 @@ What you get:
 
 ## Go live
 
-`rainmaker.config.json`:
-
-```json
-{
-  "offer": {
-    "name": "Your product",
-    "description": "One honest paragraph about what you sell.",
-    "idealCustomer": "Who buys it, in plain language.",
-    "pricePoint": "EUR 2k/mo",
-    "tone": "direct, warm, no fluff",
-    "sender": { "name": "You", "email": "you@yourcompany.com" },
-    "calendarUrl": "https://cal.com/you/15min"
-  },
-  "mode": "approval",
-  "dailySendLimit": 20,
-  "followupCadenceHours": [48, 96, 168],
-  "llm": {
-    "baseUrl": "https://api.openai.com/v1",
-    "model": "gpt-5.2",
-    "apiKeyEnv": "OPENAI_API_KEY"
-  }
-}
-```
+Copy <sub>`rainmaker.config.example.json`</sub> to `rainmaker.config.json` and fill in your offer. The example is pre-wired for Gmail/Workspace: SMTP out, IMAP in — you'll need an [app password](https://myaccount.google.com/apppasswords).
 
 ```sh
 export OPENAI_API_KEY=…
-rainmaker run --leads leads.csv
+export GMAIL_APP_PASSWORD=…
+rainmaker agent        # daemon: dashboard, webhook, inbox listener, tick loop
 ```
 
-Any OpenAI-compatible endpoint works — point `baseUrl` at a local model and the whole thing runs self-contained.
+Any OpenAI-compatible endpoint works — point `baseUrl` at a local model and the whole thing runs self-contained. Prefer API-based sending? `transport.kind` also accepts `"resend"` (HTTPS API) or `"outbox"` (writes `.eml` files, zero risk).
+
+Once running, inbound replies need no wiring at all: the IMAP listener polls your mailbox, classifies what lands, drafts the answers. The `/inbound` webhook stays available for providers with native inbound parsing.
 
 `leads.csv` needs only an `email` column; `name`, `company`, `role`, `website` and `notes` are picked up automatically under common aliases.
 
@@ -133,11 +114,11 @@ Two hard rules baked in:
 - [x] Mission-control dashboard — live pipeline web UI
 - [x] Inbound webhook — replies classified and routed automatically
 - [x] MCP server — qualify / draft / classify / pipeline tools for any agent host
-- [x] Sending adapter — Resend transport (+ zero-config file outbox)
-- [ ] Sending adapters — SMTP, Gmail API
-- [ ] Inbox listener — IMAP polling for providers without inbound webhooks
+- [x] Sending adapters — hand-rolled SMTP (TLS/STARTTLS), Resend API, zero-config file outbox
+- [x] Inbox listener — hand-rolled IMAP polling; replies route themselves
 - [ ] Calendar booking — write events directly, not just offer the link
 - [ ] Enrichment adapters — pull public company data before scoring
+- [ ] Voice follow-ups — escalate hot threads to an AI phone call
 - [ ] Multi-offer workspaces — several products, one dashboard
 
 ## Contributing

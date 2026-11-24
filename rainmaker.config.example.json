@@ -1,0 +1,36 @@
+{
+  "offer": {
+    "name": "Your product",
+    "description": "One honest paragraph about what you sell.",
+    "idealCustomer": "Who buys it, in plain language.",
+    "pricePoint": "EUR 2k/mo",
+    "tone": "direct, warm, no fluff",
+    "sender": { "name": "You", "email": "you@yourcompany.com" },
+    "calendarUrl": "https://cal.com/you/15min"
+  },
+  "mode": "approval",
+  "dailySendLimit": 20,
+  "followupCadenceHours": [48, 96, 168],
+  "llm": {
+    "baseUrl": "https://api.openai.com/v1",
+    "model": "gpt-5.2",
+    "apiKeyEnv": "OPENAI_API_KEY"
+  },
+  "transport": {
+    "kind": "smtp",
+    "smtp": {
+      "host": "smtp.gmail.com",
+      "port": 465,
+      "security": "tls",
+      "user": "you@yourcompany.com",
+      "passEnv": "GMAIL_APP_PASSWORD"
+    }
+  },
+  "inbox": {
+    "kind": "imap",
+    "host": "imap.gmail.com",
+    "port": 993,
+    "user": "you@yourcompany.com",
+    "passEnv": "GMAIL_APP_PASSWORD"
+  }
+}
