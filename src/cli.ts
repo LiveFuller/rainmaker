@@ -15,7 +15,8 @@ import { OpenAiCompatibleLlm, type LlmClient } from "./llm/client.js";
 import { OutboxSender, ResendSender, type Sender } from "./outreach/sender.js";
 import { SmtpSender } from "./outreach/smtp.js";
 import { tick, runForever } from "./agent/runner.js";
-import { createHttpServer } from "./server/http.js";
+import { createHttpServer, handleInbound } from "./server/http.js";
+import { listenForever } from "./reply/imap.js";
 import { serveMcp } from "./mcp/server.js";
 
 const DEMO_CONFIG = {
@@ -146,6 +147,17 @@ async function runAgent(configPath: string, demo: boolean, port: number): Promis
     const leads = await ingestCsv(csvPath);
     const report = await tick(config, llm, sender, store, leads);
     console.log(`seeded demo leads: qualified=${report.qualified} drafted=${report.drafted}`);
+  }
+  if (config.inbox) {
+    const i = config.inbox;
+    const pass = process.env[i.passEnv] ?? missingKey(i.passEnv);
+    void listenForever(
+      { host: i.host, port: i.port, user: i.user, pass },
+      async (email) => {
+        await handleInbound(email, config, llm, store);
+      },
+    );
+    console.log(`inbox listener: polling ${i.host} every 5 min`);
   }
   await runForever(config, llm, sender, store);
 }

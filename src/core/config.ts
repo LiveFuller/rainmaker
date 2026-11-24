@@ -32,6 +32,14 @@ export interface RainmakerConfig {
       passEnv: string;
     };
   };
+  /** Optional live inbox listener. Replies flow straight into routing. */
+  inbox?: {
+    kind: "imap";
+    host: string;
+    port: number;
+    user: string;
+    passEnv: string;
+  };
 }
 
 export class ConfigError extends Error {}
@@ -105,6 +113,17 @@ export function validateConfig(raw: unknown): RainmakerConfig {
     };
   }
 
+  let inbox: RainmakerConfig["inbox"];
+  if (c.inbox !== undefined) {
+    const i = c.inbox as Record<string, unknown>;
+    if (i.kind !== "imap") throw new ConfigError('inbox.kind must be "imap"');
+    requireString(i.host, "inbox.host");
+    requireString(i.user, "inbox.user");
+    requireString(i.passEnv, "inbox.passEnv");
+    if (typeof i.port !== "number" || i.port < 1) throw new ConfigError("inbox.port must be a number");
+    inbox = { kind: "imap", host: i.host as string, port: i.port, user: i.user as string, passEnv: i.passEnv as string };
+  }
+
   return {
     offer: offer as unknown as Offer,
     dailySendLimit,
@@ -120,6 +139,7 @@ export function validateConfig(raw: unknown): RainmakerConfig {
       ...(typeof transport.apiKeyEnv === "string" ? { apiKeyEnv: transport.apiKeyEnv } : {}),
       ...(smtp ? { smtp } : {}),
     },
+    ...(inbox ? { inbox } : {}),
   };
 }
 
