@@ -11,6 +11,9 @@ leads.csv ──▶ qualify ──▶ first touch ──▶ follow-up cadence �
 [![CI](https://github.com/LiveFuller/rainmaker/actions/workflows/ci.yml/badge.svg)](https://github.com/LiveFuller/rainmaker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node ≥ 22](https://img.shields.io/badge/node-%E2%89%A5%2022-339933)
+[![tests](https://img.shields.io/badge/tests-22%20passing-3fb950)](#how-it-thinks)
+
+![rainmaker mission control — live pipeline funnel, scored leads, message drafts awaiting approval](docs/mission-control.png)
 
 ## Why
 
@@ -52,6 +55,22 @@ Open to a quick look? Happy to keep it to ten minutes.
 ```
 
 The demo brain is deterministic and offline. Swap in a real LLM and the same pipeline runs live.
+
+## The machine
+
+`rainmaker agent` is the always-on daemon:
+
+```sh
+rainmaker agent --demo      # scripted brain, zero keys — full machine on :3000
+rainmaker agent             # live: real LLM, real transport
+```
+
+What you get:
+
+- **Mission control** at `http://localhost:3000` — live funnel, per-lead scores and reasoning, full message threads, one-click **approve & queue** for every draft.
+- **Inbound webhook** at `POST /inbound` — point your email provider's inbound parsing at it. Replies are classified (interested / question / opt-out / out-of-office) and routed: interested leads jump straight to `meeting` with a calendar reply drafted, questions get answered from your offer facts, opt-outs become untouchable.
+- **The tick loop** — every 15 minutes it qualifies new leads, sends approved mail inside your daily limit, and writes follow-ups exactly when their cadence interval expires. `48h → 96h → 168h` by default.
+- **An MCP server** — `rainmaker mcp` exposes `qualify_lead`, `draft_outreach`, `classify_reply` and `pipeline_status` as tools over stdio, so Claude Code, Cursor or any MCP host can drive the pipeline directly.
 
 ## Go live
 
@@ -96,6 +115,11 @@ Any OpenAI-compatible endpoint works — point `baseUrl` at a local model and th
 | Qualify | <sub>`src/qualify/scorer.ts`</sub> | LLM scores each lead 0–100 against your ICP, in writing |
 | Write | <sub>`src/outreach/sequence.ts`</sub> | First touch ≤ 80 words, one idea, one question; follow-ups get shorter |
 | Route | <sub>`src/reply/classifier.ts`</sub> | Replies classified: interested / question / opt-out / OOO |
+| Answer | <sub>`src/reply/responder.ts`</sub> | Drafts replies — answers questions from offer facts, proposes the calendar |
+| Run | <sub>`src/agent/runner.ts`</sub> | The tick loop: cadence scheduling, daily send limits, autopilot or approval |
+| Serve | <sub>`src/server/http.ts` + `dashboard.ts`</sub> | Mission control UI, inbound webhook, approvals — zero dependencies |
+| Speak MCP | <sub>`src/mcp/server.ts`</sub> | stdio JSON-RPC: initialize, tools/list, tools/call |
+| Send | <sub>`src/outreach/sender.ts`</sub> | Dev outbox (.eml files) or live Resend transport |
 | Pipeline | <sub>`src/core/pipeline.ts`</sub> | State machine — no illegal jumps, every move timestamped |
 | Memory | <sub>`src/core/store.ts`</sub> | Flat JSON under `.rainmaker/`, zero database required |
 
@@ -106,12 +130,15 @@ Two hard rules baked in:
 
 ## Roadmap
 
-- [ ] Sending adapters — Resend, SMTP, Gmail API
-- [ ] Inbox listener — IMAP polling + webhook ingestion for real replies
-- [ ] Mission-control dashboard — live pipeline web UI
-- [ ] MCP server — expose qualify/write/route as tools for any agent host
-- [ ] Calendar booking — offer slots and write events directly
+- [x] Mission-control dashboard — live pipeline web UI
+- [x] Inbound webhook — replies classified and routed automatically
+- [x] MCP server — qualify / draft / classify / pipeline tools for any agent host
+- [x] Sending adapter — Resend transport (+ zero-config file outbox)
+- [ ] Sending adapters — SMTP, Gmail API
+- [ ] Inbox listener — IMAP polling for providers without inbound webhooks
+- [ ] Calendar booking — write events directly, not just offer the link
 - [ ] Enrichment adapters — pull public company data before scoring
+- [ ] Multi-offer workspaces — several products, one dashboard
 
 ## Contributing
 
