@@ -5,7 +5,6 @@ import type { Message } from "../core/types.js";
 export interface SendResult {
   /** Provider-side id, or the outbox filename in dev. */
   reference: string;
-  sentAt: string;
 }
 
 export interface Sender {
@@ -29,7 +28,7 @@ export class OutboxSender implements Sender {
       "",
     ].join("\r\n");
     await writeFile(path.join(this.dir, reference), contents, "utf8");
-    return { reference, sentAt: new Date().toISOString() };
+    return { reference };
   }
 }
 
@@ -55,6 +54,6 @@ export class ResendSender implements Sender {
       throw new Error(`Resend send failed: ${res.status} ${await res.text()}`);
     }
     const data = (await res.json()) as { id?: string };
-    return { reference: data.id ?? "unknown", sentAt: new Date().toISOString() };
+    return { reference: data.id ?? "unknown" };
   }
 }

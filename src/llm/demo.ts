@@ -66,9 +66,9 @@ export class DemoLlm implements LlmClient {
     const lower = user.toLowerCase();
     if (/unsubscribe|remove me|stop email/.test(lower)) return "unsubscribe";
     if (/out of office|away until|automatic reply/.test(lower)) return "out_of_office";
+    if (/not interested|no thanks|pass/.test(lower)) return "not_interested";
     if (/sounds good|let's talk|can we talk|book|interest|send me/.test(lower)) return "interested";
     if (/how much|what does|can it|does it/.test(lower)) return "question";
-    if (/not interested|no thanks|pass/.test(lower)) return "not_interested";
     return "unknown";
   }
 }

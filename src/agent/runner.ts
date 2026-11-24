@@ -75,7 +75,7 @@ export async function tick(
       return record;
     }
     const result = await sender.send(record.lead.email, config.offer.sender, message);
-    const stamped: Message = { ...message, status: "sent", sentAt: result.sentAt, reference: result.reference };
+    const stamped: Message = { ...message, status: "sent", sentAt: now.toISOString(), reference: result.reference };
     sentToday++;
     report.sent++;
     const messages = record.messages.map((m) => (m.id === stamped.id ? stamped : m));
