@@ -2,8 +2,8 @@
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { loadConfig, validateConfig } from "./core/config.js";
-import { advance, canTransition, newRecord } from "./core/pipeline.js";
+import { loadConfig, validateConfig, type RainmakerConfig } from "./core/config.js";
+import { advance, newRecord } from "./core/pipeline.js";
 import { Store } from "./core/store.js";
 import type { LeadRecord } from "./core/types.js";
 import { ingestCsv } from "./ingest/csv.js";
@@ -11,7 +11,11 @@ import { qualifyLead } from "./qualify/scorer.js";
 import { writeFirstTouch } from "./outreach/sequence.js";
 import { classifyReply } from "./reply/classifier.js";
 import { DemoLlm } from "./llm/demo.js";
-import { OpenAiCompatibleLlm } from "./llm/client.js";
+import { OpenAiCompatibleLlm, type LlmClient } from "./llm/client.js";
+import { OutboxSender, ResendSender, type Sender } from "./outreach/sender.js";
+import { tick, runForever } from "./agent/runner.js";
+import { createHttpServer } from "./server/http.js";
+import { serveMcp } from "./mcp/server.js";
 
 const DEMO_CONFIG = {
   offer: {
@@ -85,38 +89,59 @@ async function runDemo(): Promise<void> {
     console.log(`  "${sample}" -> ${await classifyReply(llm, sample)}`);
   }
   console.log("\nDemo mode uses an offline scripted brain. Point config at a real LLM to go live.");
+  console.log("Try the live machine: rainmaker agent --demo   (dashboard + webhook on :3000)");
 }
 
-async function runReal(leadsPath: string, configPath: string): Promise<void> {
-  const config = await loadConfig(configPath);
-  const apiKey = process.env[config.llm.apiKeyEnv];
-  if (!apiKey) throw new Error(`Set ${config.llm.apiKeyEnv} in your environment`);
-  const llm = new OpenAiCompatibleLlm(config.llm.baseUrl, config.llm.model, apiKey);
-  const store = new Store(".rainmaker");
-  const records = await store.load();
+function buildRuntime(config: RainmakerConfig, demo: boolean): { llm: LlmClient; sender: Sender; store: Store } {
+  const llm = demo
+    ? new DemoLlm()
+    : (() => {
+        const apiKey = process.env[config.llm.apiKeyEnv];
+        if (!apiKey) throw new Error(`Set ${config.llm.apiKeyEnv} in your environment`);
+        return new OpenAiCompatibleLlm(config.llm.baseUrl, config.llm.model, apiKey);
+      })();
+  const sender: Sender =
+    config.transport.kind === "resend"
+      ? new ResendSender(process.env[config.transport.apiKeyEnv ?? ""] ?? missingKey(config.transport.apiKeyEnv))
+      : new OutboxSender(".rainmaker/outbox");
+  return { llm, sender, store: new Store(".rainmaker") };
+}
 
+function missingKey(env: string | undefined): never {
+  throw new Error(`Set ${env ?? "the transport key env var"} in your environment`);
+}
+
+async function runTick(leadsPath: string, configPath: string, demo: boolean): Promise<void> {
+  const config = demo ? validateConfig(DEMO_CONFIG) : await loadConfig(configPath);
+  const { llm, sender, store } = buildRuntime(config, demo);
   const leads = await ingestCsv(leadsPath);
-  console.log(`Loaded ${leads.length} leads.`);
-  for (const lead of leads) {
-    let record = records.get(lead.id) ?? newRecord(lead);
-    if (record.stage === "imported") {
-      const qualification = await qualifyLead(llm, config.offer, lead);
-      record = { ...record, qualification };
-      record = advance(record, "qualified");
-    }
-    const qualification = record.qualification;
-    if (record.stage === "qualified" && qualification && qualification.tier !== "cold") {
-      if (config.mode === "approval") {
-        const message = await writeFirstTouch(llm, config.offer, lead, qualification);
-        record = { ...record, messages: [message] };
-        console.log(`Draft for ${lead.email} needs approval before sending.`);
-        if (canTransition(record.stage, "contacted")) record = advance(record, "contacted");
-      }
-    }
-    records.set(lead.id, record);
+  const report = await tick(config, llm, sender, store, leads);
+  console.log(
+    `tick: qualified=${report.qualified} drafted=${report.drafted} sent=${report.sent} limited=${report.skippedForLimit}`,
+  );
+  printPipeline([...(await store.load()).values()]);
+}
+
+async function runAgent(configPath: string, demo: boolean, port: number): Promise<void> {
+  const config = demo ? validateConfig(DEMO_CONFIG) : await loadConfig(configPath);
+  const { llm, sender, store } = buildRuntime(config, demo);
+  const server = createHttpServer(config, llm, store);
+  server.listen(port);
+  console.log(`mission control: http://localhost:${port}`);
+  console.log(`inbound webhook: http://localhost:${port}/inbound`);
+  if (demo) {
+    const csvPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "examples", "demo-leads.csv");
+    const leads = await ingestCsv(csvPath);
+    const report = await tick(config, llm, sender, store, leads);
+    console.log(`seeded demo leads: qualified=${report.qualified} drafted=${report.drafted}`);
   }
-  await store.save(records.values());
-  printPipeline(records.values());
+  await runForever(config, llm, sender, store);
+}
+
+async function runMcp(configPath: string, demo: boolean): Promise<void> {
+  const config = demo ? validateConfig(DEMO_CONFIG) : await loadConfig(configPath);
+  const { llm, store } = buildRuntime(config, demo);
+  await serveMcp(config, llm, store);
 }
 
 async function main(): Promise<void> {
@@ -125,18 +150,28 @@ async function main(): Promise<void> {
     options: {
       config: { type: "string", default: "rainmaker.config.json" },
       leads: { type: "string" },
+      demo: { type: "boolean", default: false },
+      port: { type: "string", default: "3000" },
     },
   });
   const command = positionals[0];
+  const port = Number(values.port);
   if (command === "demo") {
     await runDemo();
   } else if (command === "run") {
     if (!values.leads) throw new Error("rainmaker run --leads <csv>");
-    await runReal(values.leads, values.config);
+    await runTick(values.leads, values.config, values.demo);
+  } else if (command === "agent") {
+    await runAgent(values.config, values.demo, port);
+  } else if (command === "mcp") {
+    await runMcp(values.config, values.demo);
   } else {
     console.log("rainmaker — the open-source AI salesman\n");
-    console.log("  rainmaker demo                     run the full loop offline, no keys needed");
-    console.log("  rainmaker run --leads leads.csv    qualify and draft against a real LLM");
+    console.log("  rainmaker demo                        the whole loop offline, no keys needed");
+    console.log("  rainmaker agent --demo                mission control + webhook on :3000, scripted brain");
+    console.log("  rainmaker agent --config cfg.json     live daemon: qualifies, writes, sends, answers");
+    console.log("  rainmaker mcp --demo                  serve rainmaker's tools over MCP (stdio)");
+    console.log("  rainmaker run --leads leads.csv       one tick against a real LLM");
   }
 }
 
