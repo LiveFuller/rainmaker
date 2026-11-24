@@ -13,6 +13,7 @@ import { classifyReply } from "./reply/classifier.js";
 import { DemoLlm } from "./llm/demo.js";
 import { OpenAiCompatibleLlm, type LlmClient } from "./llm/client.js";
 import { OutboxSender, ResendSender, type Sender } from "./outreach/sender.js";
+import { SmtpSender } from "./outreach/smtp.js";
 import { tick, runForever } from "./agent/runner.js";
 import { createHttpServer } from "./server/http.js";
 import { serveMcp } from "./mcp/server.js";
@@ -100,10 +101,21 @@ function buildRuntime(config: RainmakerConfig, demo: boolean): { llm: LlmClient;
         if (!apiKey) throw new Error(`Set ${config.llm.apiKeyEnv} in your environment`);
         return new OpenAiCompatibleLlm(config.llm.baseUrl, config.llm.model, apiKey);
       })();
-  const sender: Sender =
-    config.transport.kind === "resend"
-      ? new ResendSender(process.env[config.transport.apiKeyEnv ?? ""] ?? missingKey(config.transport.apiKeyEnv))
-      : new OutboxSender(".rainmaker/outbox");
+  let sender: Sender;
+  if (config.transport.kind === "resend") {
+    sender = new ResendSender(process.env[config.transport.apiKeyEnv ?? ""] ?? missingKey(config.transport.apiKeyEnv));
+  } else if (config.transport.kind === "smtp" && config.transport.smtp) {
+    const s = config.transport.smtp;
+    sender = new SmtpSender({
+      host: s.host,
+      port: s.port,
+      security: s.security,
+      user: s.user,
+      pass: process.env[s.passEnv] ?? missingKey(s.passEnv),
+    });
+  } else {
+    sender = new OutboxSender(".rainmaker/outbox");
+  }
   return { llm, sender, store: new Store(".rainmaker") };
 }
 

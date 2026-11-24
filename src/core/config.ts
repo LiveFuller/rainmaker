@@ -20,9 +20,17 @@ export interface RainmakerConfig {
   };
   /** How email leaves the machine. Defaults to the dev outbox. */
   transport: {
-    kind: "outbox" | "resend";
+    kind: "outbox" | "resend" | "smtp";
     /** Required when kind is resend. */
     apiKeyEnv?: string;
+    /** Required when kind is smtp. */
+    smtp?: {
+      host: string;
+      port: number;
+      security: "tls" | "starttls" | "none";
+      user: string;
+      passEnv: string;
+    };
   };
 }
 
@@ -72,10 +80,30 @@ export function validateConfig(raw: unknown): RainmakerConfig {
 
   const transport = (c.transport ?? { kind: "outbox" }) as Record<string, unknown>;
   const kind = transport.kind ?? "outbox";
-  if (kind !== "outbox" && kind !== "resend") {
-    throw new ConfigError('transport.kind must be "outbox" or "resend"');
+  if (kind !== "outbox" && kind !== "resend" && kind !== "smtp") {
+    throw new ConfigError('transport.kind must be "outbox", "resend" or "smtp"');
   }
   if (kind === "resend") requireString(transport.apiKeyEnv, "transport.apiKeyEnv");
+
+  let smtp: RainmakerConfig["transport"]["smtp"];
+  if (kind === "smtp") {
+    const s = transport.smtp as Record<string, unknown> | undefined;
+    if (!s) throw new ConfigError("transport.smtp is required when kind is smtp");
+    requireString(s.host, "transport.smtp.host");
+    requireString(s.user, "transport.smtp.user");
+    requireString(s.passEnv, "transport.smtp.passEnv");
+    if (typeof s.port !== "number" || s.port < 1) throw new ConfigError("transport.smtp.port must be a number");
+    if (s.security !== "tls" && s.security !== "starttls" && s.security !== "none") {
+      throw new ConfigError('transport.smtp.security must be "tls", "starttls" or "none"');
+    }
+    smtp = {
+      host: s.host as string,
+      port: s.port,
+      security: s.security,
+      user: s.user as string,
+      passEnv: s.passEnv as string,
+    };
+  }
 
   return {
     offer: offer as unknown as Offer,
@@ -90,6 +118,7 @@ export function validateConfig(raw: unknown): RainmakerConfig {
     transport: {
       kind,
       ...(typeof transport.apiKeyEnv === "string" ? { apiKeyEnv: transport.apiKeyEnv } : {}),
+      ...(smtp ? { smtp } : {}),
     },
   };
 }
