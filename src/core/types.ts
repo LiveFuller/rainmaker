@@ -36,6 +36,8 @@ export interface Qualification {
   reasoning: string;
 }
 
+export type MessageStatus = "draft" | "approved" | "sent";
+
 export interface Message {
   id: string;
   leadId: string;
@@ -45,6 +47,11 @@ export interface Message {
   subject: string;
   body: string;
   createdAt: string;
+  status: MessageStatus;
+  /** When the message left the door. */
+  sentAt?: string;
+  /** Provider reference or outbox filename. */
+  reference?: string;
 }
 
 export type PipelineStage =

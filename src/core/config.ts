@@ -18,6 +18,12 @@ export interface RainmakerConfig {
     model: string;
     apiKeyEnv: string;
   };
+  /** How email leaves the machine. Defaults to the dev outbox. */
+  transport: {
+    kind: "outbox" | "resend";
+    /** Required when kind is resend. */
+    apiKeyEnv?: string;
+  };
 }
 
 export class ConfigError extends Error {}
@@ -64,6 +70,13 @@ export function validateConfig(raw: unknown): RainmakerConfig {
     throw new ConfigError("followupCadenceHours must be an array of positive numbers");
   }
 
+  const transport = (c.transport ?? { kind: "outbox" }) as Record<string, unknown>;
+  const kind = transport.kind ?? "outbox";
+  if (kind !== "outbox" && kind !== "resend") {
+    throw new ConfigError('transport.kind must be "outbox" or "resend"');
+  }
+  if (kind === "resend") requireString(transport.apiKeyEnv, "transport.apiKeyEnv");
+
   return {
     offer: offer as unknown as Offer,
     dailySendLimit,
@@ -73,6 +86,10 @@ export function validateConfig(raw: unknown): RainmakerConfig {
       baseUrl: llm.baseUrl as string,
       model: llm.model as string,
       apiKeyEnv: llm.apiKeyEnv as string,
+    },
+    transport: {
+      kind,
+      ...(typeof transport.apiKeyEnv === "string" ? { apiKeyEnv: transport.apiKeyEnv } : {}),
     },
   };
 }

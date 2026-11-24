@@ -38,7 +38,16 @@ export async function writeFirstTouch(
     .update(`${lead.id}:1:${now.toISOString()}`)
     .digest("hex")
     .slice(0, 12);
-  return { id, leadId: lead.id, step: 1, channel: "email", subject, body, createdAt: now.toISOString() };
+  return {
+    id,
+    leadId: lead.id,
+    step: 1,
+    channel: "email",
+    subject,
+    body,
+    createdAt: now.toISOString(),
+    status: "draft",
+  };
 }
 
 /** Follow-up nudge for step N>1: short, references the previous touch, new angle. */
@@ -73,5 +82,6 @@ export async function writeFollowup(
     subject: subject || `Re: ${previous.subject}`,
     body,
     createdAt: now.toISOString(),
+    status: "draft",
   };
 }
