@@ -91,8 +91,9 @@ export async function tick(
       report.qualified++;
     }
 
-    if (next.stage === "qualified" && next.qualification?.tier !== "cold" && next.messages.length === 0) {
-      const first = await writeFirstTouch(llm, config.offer, next.lead, next.qualification, now);
+    const qualification = next.qualification;
+    if (next.stage === "qualified" && qualification && qualification.tier !== "cold" && next.messages.length === 0) {
+      const first = await writeFirstTouch(llm, config.offer, next.lead, qualification, now);
       next = advance({ ...next, messages: [first] }, "contacted", now);
       report.drafted++;
     }
