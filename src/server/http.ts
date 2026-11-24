@@ -1,4 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import type { RainmakerConfig } from "../core/config.js";
 import { advance } from "../core/pipeline.js";
 import type { Store } from "../core/store.js";
@@ -111,6 +114,17 @@ export function createHttpServer(config: RainmakerConfig, llm: LlmClient, store:
       if (req.method === "GET" && (req.url === "/" || req.url === "/index.html")) {
         res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
         res.end(dashboardHtml());
+        return;
+      }
+      if (req.method === "GET" && req.url === "/assets/crystal-header.webp") {
+        const asset = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "docs", "crystal-header.webp");
+        try {
+          const bytes = await readFile(asset);
+          res.writeHead(200, { "content-type": "image/webp", "cache-control": "public, max-age=86400" });
+          res.end(bytes);
+        } catch {
+          json(res, 404, { error: "asset missing" });
+        }
         return;
       }
       if (req.method === "GET" && req.url === "/api/state") {
